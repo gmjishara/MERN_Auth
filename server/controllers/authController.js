@@ -4,11 +4,13 @@ import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js
 import { generateVerificationCode } from "../utils/generateVerificationCode.js";
 
 export const register = async (req, res) => {
-  const { fistName, lastName, email, password } = req.body;
+  const { firstName, lastName, email, password } = req.body;
 
-  const canSave = Boolean(fistName && lastName && email && password);
+  const canSave = Boolean(firstName && lastName && email && password);
   if (!canSave) {
-    throw new Error("All fields are requires");
+    return res
+      .status(400)
+      .json({ success: false, message: "All fields are required!" });
   }
 
   try {
@@ -23,7 +25,7 @@ export const register = async (req, res) => {
     const verifyOtp = generateVerificationCode();
 
     const user = new userModel({
-      fistName,
+      firstName,
       lastName,
       email,
       password: hashedPassword,

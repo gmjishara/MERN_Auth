@@ -8,8 +8,6 @@ import connectDB from "./config/mongodb.js";
 import authRoutes from "./routes/authRoute.js";
 
 const app = express();
-const port = process.env.PORT || 4000;
-connectDB();
 
 app.use(express.json());
 app.use(cookieParser());
@@ -19,7 +17,10 @@ app.use(
   })
 );
 
-app.get("/", (req, res) => res.send("App working"));
-app.use("api/auth", authRoutes);
+app.get("/", (req, res) => res.json("App working"));
+app.use("/api/auth", authRoutes);
 
-app.listen(port, () => console.log(`Server started in PORT: ${port}`));
+app.listen(4000, () => {
+  connectDB();
+  console.log(`Server started in PORT: 4000`);
+});
