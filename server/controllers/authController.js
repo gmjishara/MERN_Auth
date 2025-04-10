@@ -1,7 +1,9 @@
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import userModel from "../models/userModel.js";
 import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js";
 import { generateVerificationCode } from "../utils/generateVerificationCode.js";
+import { getAccessToken } from "../utils/getAccessToken.js";
 
 export const register = async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
@@ -64,24 +66,69 @@ export const login = async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.json({
+    return res.status(401).json({
       success: false,
       message: "Email and password are required!",
     });
   }
 
   try {
+    //check user is exist
     const user = await userModel.findOne({ email });
 
     if (!user) {
-      return res.json({
+      return res.status(401).json({
         success: false,
         message: "Invalid email or password",
       });
     }
 
-    generateTokenAndSetCookie(res, user._id);
+    //check password is correct
+    const match = await bcrypt.compare(password, user.password);
 
-    return res.json({ success: true });
+    if (!match) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid email or password" });
+    }
+
+    //create access token
+    const accessToken = getAccessToken(user);
+
+    //set refresh token in the cookies
+    generateTokenAndSetCookie(res, user);
+
+    res.json({ success: true, accessToken });
   } catch (error) {}
+};
+
+const refresh = async (req, res) => {
+  const cookies = req.cookies;
+  const refreshToken = cookies?.jwt;
+
+  if (!refreshToken)
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+
+  //verify refresh token by jwt
+  jwt.verify(
+    refreshToken,
+    process.env.REFRESH_TOKEN_SECRET,
+    async (error, decoded) => {
+      if (error)
+        return res
+          .status(403)
+          .json({ success: false, message: "Unauthorized" });
+
+      const user = await userModel.findById(decoded.userId);
+
+      if (!user)
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized" });
+
+      const accessToken = getAccessToken(user);
+
+      res.json({ success: true, accessToken });
+    }
+  );
 };
