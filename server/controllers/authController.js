@@ -34,10 +34,11 @@ export const register = async (req, res) => {
       email,
       password: hashedPassword,
       verifyOtp,
-      verifyOtpExpireAt: Date.now() + 24 * 60 * 60 * 1000,
+      verifyOtpExpireAt: 5 * 60 * 1000,
     });
     await user.save();
 
+    //send otp to user email
     await mailSender(user);
 
     res.status(201).json({
@@ -141,4 +142,29 @@ export const refresh = async (req, res) => {
       res.json({ success: true, accessToken });
     }
   );
+};
+
+//re send verification code
+export const resendVerificationEmail = async (req, res) => {
+  const { email } = req.body;
+
+  const user = await userModel.findOne({ email });
+
+  if (!user) {
+    return res.status(404).json("User not found!");
+  }
+
+  const verifyOtp = generateVerificationCode();
+
+  user.verifyOtp = verifyOtp;
+  user.verifyOtpExpireAt = 5 * 60 * 1000;
+  await user.save();
+
+  await mailSender(user);
+
+  res.json({
+    success: true,
+    message: "Email has been sent",
+    expiresOn: `${user.verifyOtpExpireAt / (60 * 1000)} min`,
+  });
 };

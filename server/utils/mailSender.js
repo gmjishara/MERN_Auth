@@ -1,7 +1,9 @@
 import nodemailer from "nodemailer";
 
 const mailOptions = (user) => {
-  const { email, firstName, verifyOtp } = user;
+  const { email, firstName, verifyOtp, verifyOtpExpireAt } = user;
+
+  const expiresOn = verifyOtpExpireAt / (60 * 1000);
 
   const options = {
     from: {
@@ -16,7 +18,7 @@ const mailOptions = (user) => {
       
                  OTP: ${verifyOtp}
       
-                 This code is valid for 1 day. Please do not share it with anyone for security reasons.
+                 This code is valid for ${expiresOn} min. Please do not share it with anyone for security reasons.
       
                  If you did not request this OTP, please ignore this email or contact our support team immediately at ${process.env.USER}.
       
@@ -31,7 +33,7 @@ const mailOptions = (user) => {
                   <p>Dear ${firstName},</p>
                   <p>Your One-Time Password (OTP) for verification is:</p>
                   <h3>${verifyOtp}</h3>
-                  <p>This code is valid for 1 day. Please do not share it with anyone.</p>
+                  <p>This code is valid for ${expiresOn} min. Please do not share it with anyone.</p>
                   <p>If you did not request this OTP, please ignore this email or contact our support team immediately at <a href="mailto:${process.env.USER}">${process.env.USER}</a>.</p>
               </div>
               <div>
@@ -43,7 +45,7 @@ const mailOptions = (user) => {
   return options;
 };
 
-export const mailSender = async(user) => {
+export const mailSender = async (user) => {
   const transporter = nodemailer.createTransport({
     service: "gmail",
     host: "smtp.gmail.com",
@@ -59,7 +61,7 @@ export const mailSender = async(user) => {
 
   try {
     await transporter.sendMail(options);
-    console.log("Email has been sent")
+    console.log("Email has been sent");
   } catch (error) {
     console.log(error);
   }
