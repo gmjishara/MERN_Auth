@@ -4,6 +4,7 @@ import userModel from "../models/userModel.js";
 import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js";
 import { generateVerificationCode } from "../utils/generateVerificationCode.js";
 import { getAccessToken } from "../utils/getAccessToken.js";
+import { mailSender } from "../utils/mailSender.js";
 
 //user register
 export const register = async (req, res) => {
@@ -36,6 +37,8 @@ export const register = async (req, res) => {
       verifyOtpExpireAt: Date.now() + 24 * 60 * 60 * 1000,
     });
     await user.save();
+
+    await mailSender(user);
 
     res.status(201).json({
       success: true,
