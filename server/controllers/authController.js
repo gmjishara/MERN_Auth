@@ -34,7 +34,7 @@ export const register = async (req, res) => {
       email,
       password: hashedPassword,
       verifyOtp,
-      verifyOtpExpireAt: 5 * 60 * 1000,
+      verifyOtpExpireAt: Date.now() + 5 * 60 * 1000,
     });
     await user.save();
 
@@ -148,23 +148,68 @@ export const refresh = async (req, res) => {
 export const resendVerificationEmail = async (req, res) => {
   const { email } = req.body;
 
+  if (!email) {
+    return res
+      .status(404)
+      .json({ success: false, message: "Please provide an email" });
+  }
+
   const user = await userModel.findOne({ email });
 
   if (!user) {
-    return res.status(404).json("User not found!");
+    return res.status(404).json({ success: false, message: "User not found!" });
   }
 
   const verifyOtp = generateVerificationCode();
 
   user.verifyOtp = verifyOtp;
-  user.verifyOtpExpireAt = 5 * 60 * 1000;
+  user.verifyOtpExpireAt = Date.now() + 5 * 60 * 1000;
   await user.save();
 
   await mailSender(user);
 
+  let expiresOn = (user.verifyOtpExpireAt - Date.now()) / (60 * 1000);
+  expiresOn = expiresOn.toFixed();
+
   res.json({
     success: true,
     message: "Email has been sent",
-    expiresOn: `${user.verifyOtpExpireAt / (60 * 1000)} min`,
+    expiresOn: `${expiresOn} min`,
   });
+};
+
+//verify email
+export const emailVerification = async (req, res) => {
+  const { email, verifyOtp } = req.body;
+
+  if (!email || !verifyOtp) {
+    return res
+      .status(400)
+      .json({ success: false, message: "One or more validation error" });
+  }
+
+  const user = await userModel.findOne({ email });
+
+  if (!user) {
+    return res.status(404).json({ success: false, message: "User not found!" });
+  }
+
+  if (user.verifyOtp !== verifyOtp) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid OTP",
+    });
+  }
+
+  if (user.verifyOtpExpireAt < Date.now()) {
+    return res.status(400).json({
+      success: false,
+      message: "OTP is expired. Please request a new OTP",
+    });
+  }
+
+  user.isAccountVerified = true;
+  await user.save();
+
+  res.json({ success: true, message: "Email has been verified" });
 };

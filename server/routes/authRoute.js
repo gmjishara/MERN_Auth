@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  emailVerification,
   login,
   refresh,
   register,
@@ -12,5 +13,6 @@ router.post("/register", register);
 router.post("/login", login);
 router.post("/refresh", refresh);
 router.post("/email:re-send", resendVerificationEmail);
+router.post("/email:verify", emailVerification);
 
 export default router;

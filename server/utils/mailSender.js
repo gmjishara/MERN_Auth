@@ -3,7 +3,8 @@ import nodemailer from "nodemailer";
 const mailOptions = (user) => {
   const { email, firstName, verifyOtp, verifyOtpExpireAt } = user;
 
-  const expiresOn = verifyOtpExpireAt / (60 * 1000);
+  let expiresOn = (verifyOtpExpireAt - Date.now()) / (60 * 1000);
+  expiresOn = expiresOn.toFixed();
 
   const options = {
     from: {
