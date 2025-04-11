@@ -5,6 +5,7 @@ import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js
 import { generateVerificationCode } from "../utils/generateVerificationCode.js";
 import { getAccessToken } from "../utils/getAccessToken.js";
 
+//user register
 export const register = async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
 
@@ -36,19 +37,6 @@ export const register = async (req, res) => {
     });
     await user.save();
 
-    // don't send token in the register stage
-
-    // const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-    //   expiresIn: "7d",
-    // });
-
-    // res.cookie("token", token, {
-    //   httpOnly: true,
-    //   secure: process.env.NODE_ENV === "production",
-    //   sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
-    //   maxAge: 7 * 24 * 60 * 60 * 100,
-    // });
-
     res.status(201).json({
       success: true,
       message: "User created successfully",
@@ -62,6 +50,7 @@ export const register = async (req, res) => {
   }
 };
 
+//user login
 export const login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -96,13 +85,18 @@ export const login = async (req, res) => {
     const accessToken = getAccessToken(user);
 
     //set refresh token in the cookies
-    generateTokenAndSetCookie(res, user);
+    const refreshToken = generateTokenAndSetCookie(res, user);
 
-    res.json({ success: true, accessToken });
+    //save token in db
+    user.token = refreshToken;
+    await user.save();
+
+    res.status(200).json({ success: true, accessToken });
   } catch (error) {}
 };
 
-const refresh = async (req, res) => {
+//refresh token method
+export const refresh = async (req, res) => {
   const cookies = req.cookies;
   const refreshToken = cookies?.jwt;
 
@@ -126,7 +120,20 @@ const refresh = async (req, res) => {
           .status(401)
           .json({ success: false, message: "Unauthorized" });
 
+      if (!user.token || user.token !== refreshToken) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized" });
+      }
+
+      //create new access token
       const accessToken = getAccessToken(user);
+
+      //create new refresh token
+      const newRefreshToken = generateTokenAndSetCookie(res, user);
+
+      user.token = newRefreshToken;
+      await user.save();
 
       res.json({ success: true, accessToken });
     }
