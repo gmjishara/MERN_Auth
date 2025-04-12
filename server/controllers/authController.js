@@ -5,6 +5,10 @@ import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js
 import { generateVerificationCode } from "../utils/generateVerificationCode.js";
 import { getAccessToken } from "../utils/getAccessToken.js";
 import { mailSender } from "../utils/mailSender.js";
+import {
+  emailVerificationOptions,
+  resetPasswordOptions,
+} from "../utils/mailOptions.js";
 
 //user register
 export const register = async (req, res) => {
@@ -39,7 +43,7 @@ export const register = async (req, res) => {
     await user.save();
 
     //send otp to user email
-    await mailSender(user);
+    await mailSender(emailVerificationOptions(user));
 
     res.status(201).json({
       success: true,
@@ -151,7 +155,7 @@ export const resendVerificationEmail = async (req, res) => {
   if (!email) {
     return res
       .status(404)
-      .json({ success: false, message: "Please provide an email" });
+      .json({ success: false, message: "Email is required!" });
   }
 
   const user = await userModel.findOne({ email });
@@ -166,7 +170,7 @@ export const resendVerificationEmail = async (req, res) => {
   user.verifyOtpExpireAt = Date.now() + 5 * 60 * 1000;
   await user.save();
 
-  await mailSender(user);
+  await mailSender(emailVerificationOptions(user));
 
   let expiresOn = (user.verifyOtpExpireAt - Date.now()) / (60 * 1000);
   expiresOn = expiresOn.toFixed();
@@ -212,4 +216,33 @@ export const emailVerification = async (req, res) => {
   await user.save();
 
   res.json({ success: true, message: "Email has been verified" });
+};
+
+//forgot password
+export const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Email is required!" });
+  }
+
+  const user = await userModel.findOne({ email });
+
+  if (!user) {
+    return res.status(404).json({ success: false, message: "User not found!" });
+  }
+
+  const resetOtp = generateVerificationCode();
+  user.resetOtp = resetOtp;
+  user.resetOtpExpireAt = Date.now() + 5 * 60 * 1000;
+  await user.save();
+
+  await mailSender(resetPasswordOptions(user));
+
+  res.json({
+    success: true,
+    message: `A password reset OTP has been sent to your registered email ${email}. Please check your inbox.`,
+  });
 };
