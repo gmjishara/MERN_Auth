@@ -1,5 +1,5 @@
-// Or from '@reduxjs/toolkit/query' if not using the auto-generated hooks
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { logOut, setCredentials } from "../../features/auth/authSlice";
 
 const baseQuery = fetchBaseQuery({
   baseUrl: "/",
@@ -28,13 +28,13 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
       api,
       extraOptions
     );
-    if (refreshResult.data) {
+    if (refreshResult.data.token) {
       // store the new token
-      api.dispatch(tokenReceived(refreshResult.data));
+      api.dispatch(setCredentials(refreshResult.data.token));
       // retry the initial query
       result = await baseQuery(args, api, extraOptions);
     } else {
-      api.dispatch(loggedOut());
+      api.dispatch(logOut());
     }
   }
   return result;
