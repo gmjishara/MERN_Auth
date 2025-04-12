@@ -100,7 +100,9 @@ export const login = async (req, res) => {
     await user.save();
 
     res.status(200).json({ success: true, accessToken });
-  } catch (error) {}
+  } catch (error) {
+    return res.json({ success: false, message: error.message });
+  }
 };
 
 //refresh token method
@@ -111,41 +113,45 @@ export const refresh = async (req, res) => {
   if (!refreshToken)
     return res.status(401).json({ success: false, message: "Unauthorized" });
 
-  //verify refresh token by jwt
-  jwt.verify(
-    refreshToken,
-    process.env.REFRESH_TOKEN_SECRET,
-    async (error, decoded) => {
-      if (error)
-        return res
-          .status(403)
-          .json({ success: false, message: "Unauthorized" });
+  try {
+    //verify refresh token by jwt
+    jwt.verify(
+      refreshToken,
+      process.env.REFRESH_TOKEN_SECRET,
+      async (error, decoded) => {
+        if (error)
+          return res
+            .status(403)
+            .json({ success: false, message: "Unauthorized" });
 
-      const user = await userModel.findById(decoded.userId);
+        const user = await userModel.findById(decoded.userId);
 
-      if (!user)
-        return res
-          .status(401)
-          .json({ success: false, message: "Unauthorized" });
+        if (!user)
+          return res
+            .status(401)
+            .json({ success: false, message: "Unauthorized" });
 
-      if (!user.token || user.token !== refreshToken) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Unauthorized" });
+        if (!user.token || user.token !== refreshToken) {
+          return res
+            .status(401)
+            .json({ success: false, message: "Unauthorized" });
+        }
+
+        //create new access token
+        const accessToken = getAccessToken(user);
+
+        //create new refresh token
+        const newRefreshToken = generateTokenAndSetCookie(res, user);
+
+        user.token = newRefreshToken;
+        await user.save();
+
+        res.json({ success: true, accessToken });
       }
-
-      //create new access token
-      const accessToken = getAccessToken(user);
-
-      //create new refresh token
-      const newRefreshToken = generateTokenAndSetCookie(res, user);
-
-      user.token = newRefreshToken;
-      await user.save();
-
-      res.json({ success: true, accessToken });
-    }
-  );
+    );
+  } catch (error) {
+    return res.json({ success: false, message: error.message });
+  }
 };
 
 //re send verification code
@@ -158,28 +164,34 @@ export const resendVerificationEmail = async (req, res) => {
       .json({ success: false, message: "Email is required!" });
   }
 
-  const user = await userModel.findOne({ email });
+  try {
+    const user = await userModel.findOne({ email });
 
-  if (!user) {
-    return res.status(404).json({ success: false, message: "User not found!" });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found!" });
+    }
+
+    const verifyOtp = generateVerificationCode();
+
+    user.verifyOtp = verifyOtp;
+    user.verifyOtpExpireAt = Date.now() + 5 * 60 * 1000;
+    await user.save();
+
+    await mailSender(emailVerificationOptions(user));
+
+    let expiresOn = (user.verifyOtpExpireAt - Date.now()) / (60 * 1000);
+    expiresOn = expiresOn.toFixed();
+
+    res.json({
+      success: true,
+      message: "Email has been sent",
+      expiresOn: `${expiresOn} min`,
+    });
+  } catch (error) {
+    return res.json({ success: false, message: error.message });
   }
-
-  const verifyOtp = generateVerificationCode();
-
-  user.verifyOtp = verifyOtp;
-  user.verifyOtpExpireAt = Date.now() + 5 * 60 * 1000;
-  await user.save();
-
-  await mailSender(emailVerificationOptions(user));
-
-  let expiresOn = (user.verifyOtpExpireAt - Date.now()) / (60 * 1000);
-  expiresOn = expiresOn.toFixed();
-
-  res.json({
-    success: true,
-    message: "Email has been sent",
-    expiresOn: `${expiresOn} min`,
-  });
 };
 
 //verify email
@@ -192,33 +204,42 @@ export const emailVerification = async (req, res) => {
       .json({ success: false, message: "One or more validation error" });
   }
 
-  const user = await userModel.findOne({ email });
+  try {
+    const user = await userModel.findOne({ email });
 
-  if (!user) {
-    return res.status(404).json({ success: false, message: "User not found!" });
-  }
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found!" });
+    }
 
-  if (user.verifyOtp !== verifyOtp) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid OTP",
+    if (user.verifyOtp !== verifyOtp) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP",
+      });
+    }
+
+    if (user.verifyOtpExpireAt < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP is expired. Please request a new OTP",
+      });
+    }
+
+    user.isAccountVerified = true;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Email has been verified successfully",
     });
+  } catch (error) {
+    return res.json({ success: false, message: error.message });
   }
-
-  if (user.verifyOtpExpireAt < Date.now()) {
-    return res.status(400).json({
-      success: false,
-      message: "OTP is expired. Please request a new OTP",
-    });
-  }
-
-  user.isAccountVerified = true;
-  await user.save();
-
-  res.json({ success: true, message: "Email has been verified" });
 };
 
-//forgot password
+//sen forgot password OTP
 export const forgotPassword = async (req, res) => {
   const { email } = req.body;
 
@@ -228,21 +249,72 @@ export const forgotPassword = async (req, res) => {
       .json({ success: false, message: "Email is required!" });
   }
 
-  const user = await userModel.findOne({ email });
+  try {
+    const user = await userModel.findOne({ email });
 
-  if (!user) {
-    return res.status(404).json({ success: false, message: "User not found!" });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found!" });
+    }
+
+    const resetOtp = generateVerificationCode();
+    user.resetOtp = resetOtp;
+    user.resetOtpExpireAt = Date.now() + 5 * 60 * 1000;
+    await user.save();
+
+    await mailSender(resetPasswordOptions(user));
+
+    res.json({
+      success: true,
+      message: `A password reset OTP has been sent to your registered email ${email}. Please check your inbox.`,
+    });
+  } catch (error) {
+    return res.json({ success: false, message: error.message });
+  }
+};
+
+//reset the password
+export const resetPassword = async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+
+  if (!email || !otp || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      message: "Email, OTP and new password are required!",
+    });
   }
 
-  const resetOtp = generateVerificationCode();
-  user.resetOtp = resetOtp;
-  user.resetOtpExpireAt = Date.now() + 5 * 60 * 1000;
-  await user.save();
+  try {
+    const user = await userModel.findOne({ email });
 
-  await mailSender(resetPasswordOptions(user));
+    if (user.resetOtp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP",
+      });
+    }
 
-  res.json({
-    success: true,
-    message: `A password reset OTP has been sent to your registered email ${email}. Please check your inbox.`,
-  });
+    if (user.resetOtpExpireAt < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP is expired. Please request a new OTP",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    user.password = hashedPassword;
+    user.resetOtp = "";
+    user.resetOtpExpireAt = 0;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Password has been reset successfully",
+    });
+  } catch (error) {
+    return res.json({ success: false, message: error.message });
+  }
 };
